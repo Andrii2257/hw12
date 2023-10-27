@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -37,20 +39,30 @@ public class TimeServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        String[] timezones = req.getParameterValues("timezone");
         int offset = 0;
-        if (timezones != null) offset = Integer.parseInt(timezones[0]
+        String timezone = "";
+        String[] timezones = req.getParameterValues("timezone");
+        if (timezones != null) {
+            timezone = timezones[0];
+        } else {
+            timezone = getCookies(req).get("lastTimezone");
+            if (timezone == null) timezone = "UTC+0";
+        }
+        offset = Integer.parseInt(timezone
                 .replace("UTC", "")
                 .replace("UT", "")
                 .replace("GMT", "")
                 .replace("+", "")
                 .trim());
+
         String sOffset = "";
         if (offset < 0) sOffset = String.valueOf(offset);
         else if (offset > 0) sOffset = "+" + offset;
         OffsetDateTime utcDateTime = OffsetDateTime.now(ZoneOffset.ofHours(offset));
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
         String formattedDate = utcDateTime.format(formatter) + " UTC" + sOffset;
+
+        resp.setHeader("Set-Cookie", "lastTimezone=" + timezone.replace(" ", "+"));
 
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("time", formattedDate);
@@ -59,7 +71,25 @@ public class TimeServlet extends HttpServlet {
                 Map.of("queryParams", params)
         );
         engine.process("time", simpleContext, resp.getWriter());
-        resp.addHeader("Servlet-time", formattedDate);
         resp.getWriter().close();
+    }
+
+    private Map<String, String> getCookies(HttpServletRequest req) {
+        String cookies = req.getHeader("Cookie");
+
+        if (cookies == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, String> result = new HashMap<>();
+
+        String[] separateCookies = cookies.split(";");
+        for (String pair : separateCookies) {
+            String[] keyValue = pair.split("=");
+
+            result.put(keyValue[0], keyValue[1]);
+        }
+
+        return result;
     }
 }
